@@ -5,6 +5,13 @@
 #include <QUdpSocket>
 #include <QByteArray>
 #include <QNetworkDatagram>
+#include "packetanalyzer.h"
+#include <QTableWidget>
+#include <QTreeWidget>
+#include <QPushButton>
+#include <QVBoxLayout>
+#include <QSplitter>
+#include <QWidget>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -22,11 +29,13 @@ public:
 
 
 private slots:
-    void handler();
+    void fillFramesTable(Frame frame);
+
+
 private:
-    void validation();
     Ui::PacketAnalyzerWindow *ui;
-    QUdpSocket* udpsocket;
+    PacketAnalyzer* analyzer;
+    QTableWidget* framesTable;
 
 };
 #endif // PACKETANALYZERWINDOW_H

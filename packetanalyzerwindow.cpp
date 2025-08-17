@@ -1,5 +1,6 @@
 #include "packetanalyzerwindow.h"
 #include "ui_packetanalyzerwindow.h"
+#include <QHeaderView>
 #include <QDebug>
 
 
@@ -8,41 +9,67 @@ PacketAnalyzerWindow::PacketAnalyzerWindow(QWidget *parent)
     , ui(new Ui::PacketAnalyzerWindow)
 {
     ui->setupUi(this);
-    udpsocket=new QUdpSocket(this);
+    //main splitter
+    QSplitter* mainSplitter = new QSplitter(Qt::Vertical);
+    setCentralWidget(mainSplitter);
 
-    // check if the binding works fine
-    if(!udpsocket->bind(QHostAddress::AnyIPv4,2000))
-    {
-        qDebug()<<"Failed to bind";
-        return;
-    }
+    //splitter between the table and filters
+    QSplitter* topSplitter = new QSplitter(Qt::Horizontal);
 
-    //connection that handles the program
-    connect(udpsocket,&QUdpSocket::readyRead,this,&PacketAnalyzerWindow::handler);
+    // Setup the table
+    framesTable = new QTableWidget(0, 8);
+    framesTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    framesTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    framesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    QStringList headersLabels = {"#","Type", "Ip", "Port", "IP", "Port", "Type", "Validity"};
+    framesTable->setColumnWidth(0,30);
+    framesTable->verticalHeader()->setVisible(true);
+    framesTable->verticalHeader()->setDefaultAlignment(Qt::AlignRight | Qt::AlignCenter);
+    framesTable->setHorizontalHeaderLabels(headersLabels);
+    topSplitter->addWidget(framesTable);
 
+    // Buttons for filters
+    QWidget* filters = new QWidget;
+    QVBoxLayout* filterslay = new QVBoxLayout(filters);
+    filterslay->addWidget(new QPushButton("Click"));
+    filterslay->addWidget(new QPushButton("Click"));
+    filterslay->addWidget(new QPushButton("Click"));
+    filterslay->addStretch();
+    filters->setLayout(filterslay);
+    topSplitter->addWidget(filters);
+
+    // Tree widget
+    QTreeWidget* frameTree = new QTreeWidget;
+
+    // Setting the main Splitter
+    mainSplitter->addWidget(topSplitter);
+    mainSplitter->addWidget(frameTree);
+
+    //Size initilaization
+    topSplitter->setSizes(QList<int>() << 450 << 100);
+    mainSplitter->setSizes(QList<int>() << 300 << 200);
+
+    // Connections
+    // connect(analyzer, &PacketAnalyzer::recievedPacket, this, &PacketAnalyzerWindow::fillFramesTable);
 
 }
 
-//to recieve the data and check it and analyzer function called inside
-void PacketAnalyzerWindow::handler(){
-    while(udpsocket->hasPendingDatagrams())
-    {
-        QNetworkDatagram loadedDatagram=udpsocket->receiveDatagram();
-        QByteArray frameArray= loadedDatagram.data();
-        //call validation function
-        //inside the validation call the analyzer for the complete values
-        //create a function that takes the validation
-    }
-}
 
 
-//I'm thinking to make like an enum flags to determine what is the reason for invalid packets
-void PacketAnalyzerWindow::validation(){
+
+void PacketAnalyzerWindow::fillFramesTable(Frame frame){
+    framesTable->insertRow(framesTable->rowCount());
+    // switch(frame.type){
+    // case Protocol::ETHERTYPE_ARP:
+    //     framesTable->
+    //     break;
+    // case Protocol::ETHERTYPE_IPV4:
+    //     break;
+    // case Protocol::ETHERTYPE_IPV6:
+    //     break
 
 }
-
-
-
+}
 PacketAnalyzerWindow::~PacketAnalyzerWindow()
 {
     delete ui;

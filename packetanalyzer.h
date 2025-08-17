@@ -11,7 +11,6 @@
 #include <QUdpSocket>
 #include <QNetworkDatagram>
 
-
 // Protocol type constants
 namespace Protocol {
 constexpr uint16_t ETHERTYPE_IPV4 = 0x0800;
@@ -32,6 +31,12 @@ constexpr size_t IPV6_HEADER_SIZE = 40;
 constexpr size_t TCP_MIN_HEADER_SIZE = 20;
 constexpr size_t UDP_HEADER_SIZE = 8;
 constexpr size_t ICMP_HEADER_SIZE = 8;
+
+// Maximum expected packet size (standard MTU)
+constexpr size_t MAX_PACKET_SIZE = 1500;
+
+// Fill value for missing data
+constexpr uint8_t MISSING_DATA_FILL = 0xFF;
 }
 
 // Corruption flags - indicates which part is corrupted/missing
@@ -59,7 +64,8 @@ enum class CorruptionFlag : uint32_t {
     ICMP_HEADER_INCOMPLETE = 0x00040000,
 
     // Payload corruption
-    PAYLOAD_MISSING     = 0x00100000
+    PAYLOAD_MISSING     = 0x00100000,
+    PAYLOAD_TRUNCATED   = 0x00200000
 };
 
 // Allow bitwise operations
@@ -75,8 +81,6 @@ inline bool operator&(CorruptionFlag a, CorruptionFlag b) {
     return (static_cast<uint32_t>(a) & static_cast<uint32_t>(b)) != 0;
 }
 
-
-
 // Structure definitions matching the C program
 struct TCPHeader {
     uint16_t src_port = 0xFFFF;     // -1 indicates not set
@@ -89,6 +93,11 @@ struct TCPHeader {
     uint16_t checksum = 0xFFFF;
     uint16_t urgent_pointer = 0xFFFF;
     bool isValid = false;
+
+    // Application layer payload
+    QByteArray payload;
+    size_t expectedPayloadSize = 0;  // Expected size based on IP total length
+    bool payloadComplete = false;
 };
 
 struct UDPHeader {
@@ -97,6 +106,11 @@ struct UDPHeader {
     uint16_t length = 0xFFFF;
     uint16_t checksum = 0xFFFF;
     bool isValid = false;
+
+    // Application layer payload
+    QByteArray payload;
+    size_t expectedPayloadSize = 0;  // Expected size based on UDP length field
+    bool payloadComplete = false;
 };
 
 struct ICMPHeader {
@@ -105,6 +119,11 @@ struct ICMPHeader {
     uint16_t checksum = 0xFFFF;
     uint32_t rest_of_header = 0xFFFFFFFF;
     bool isValid = false;
+
+    // ICMP data/payload
+    QByteArray payload;
+    size_t expectedPayloadSize = 0;
+    bool payloadComplete = false;
 };
 
 struct ARPPacket {
@@ -176,22 +195,32 @@ struct Frame {
     // Raw data
     QByteArray rawData;
 
+    // Completed data (after padding)
+    QByteArray completedData;
+
     // Helper methods
     bool hasCorruption() const { return corruptionFlags != CorruptionFlag::NONE; }
     bool isCorrupted(CorruptionFlag flag) const { return (corruptionFlags & flag); }
     QString getCorruptionString() const;
 };
 
-class PacketAnalyzer {
-
+class PacketAnalyzer : public QObject {
     Q_OBJECT
 
 private:
     QList<Frame> Packets;
     QUdpSocket* udpsocket;
+
+public:
+    PacketAnalyzer();
+
 private:
     // Validation function - checks what parts are corrupted/missing
     CorruptionFlag validatePacket(const QByteArray& frameData);
+
+    // Frame completion function - pads incomplete frames with 0xFF
+    QByteArray completeFrame(const QByteArray& frameData, CorruptionFlag corruptionFlags);
+
     // Extraction function - extracts data and fills struct (even if corrupted)
     Frame extractFrame(const QByteArray& frameData);
 
@@ -201,22 +230,21 @@ private:
     void printUDPHeader(const UDPHeader& udp);
     void printICMPHeader(const ICMPHeader& icmp);
 
-
     // Helper extraction functions
     void extractEthernet(Frame& frame, const uint8_t* data, size_t dataSize);
     void extractARP(ARPPacket& arp, const uint8_t* data, size_t dataSize);
     void extractIPv4(IPv4Packet& ipv4, const uint8_t* data, size_t dataSize);
     void extractIPv6(IPv6Packet& ipv6, const uint8_t* data, size_t dataSize);
-    void extractTCP(TCPHeader& tcp, const uint8_t* data, size_t dataSize);
+    void extractTCP(TCPHeader& tcp, const uint8_t* data, size_t dataSize, size_t totalIPPayloadSize);
     void extractUDP(UDPHeader& udp, const uint8_t* data, size_t dataSize);
     void extractICMP(ICMPHeader& icmp, const uint8_t* data, size_t dataSize);
 
-
-    //app engine
+    // App engine
+private slots:
     void handler();
-signals:
-    Frame recievedPacket();
 
+signals:
+    void recievedPacket(Frame frame);
 };
 
 #endif // PACKETANALYZER_H
